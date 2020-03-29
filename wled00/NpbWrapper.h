@@ -4,7 +4,7 @@
 
 //PIN CONFIGURATION
 #ifndef LEDPIN
-#define LEDPIN 1  //strip pin. Any for ESP32, gpio2 or 3 is recommended for ESP8266 (gpio2/3 are labeled D4/RX on NodeMCU and Wemos)
+#define LEDPIN 2  //strip pin. Any for ESP32, gpio2 or 3 is recommended for ESP8266 (gpio2/3 are labeled D4/RX on NodeMCU and Wemos)
 #endif
 //#define USE_APA102  // Uncomment for using APA102 LEDs.
 //#define USE_WS2801  // Uncomment for using WS2801 LEDs (make sure you have NeoPixelBus v2.5.6 or newer)
@@ -13,6 +13,7 @@
 //#define WLED_USE_ANALOG_LEDS //Uncomment for using "dumb" PWM controlled LEDs (see pins below, default R: gpio5, G: 12, B: 15, W: 13)
 //#define WLED_USE_H801 //H801 controller. Please uncomment #define WLED_USE_ANALOG_LEDS as well
 //#define WLED_USE_5CH_LEDS  //5 Channel H801 for cold and warm white
+//#define WLED_USE_H803 // DATA - GPIO1, CLK - GPIO14
 
 #ifndef BTNPIN
 #define BTNPIN  0  //button pin. Needs to have pullup (gpio0 recommended)
@@ -43,6 +44,8 @@
   #undef BTNPIN   // Deactivate button pin if it conflicts with one of the APA102 pins.
  #endif
 #endif
+
+
 
 #ifdef WLED_USE_ANALOG_LEDS
   //PWM pins - PINs 15,13,12,14 (W2 = 04)are used with H801 Wifi LED Controller
