@@ -3,12 +3,12 @@
 /*
    Main sketch, global variable declarations
    @title WLED project sketch
-   @version 0.9.1n
+   @version 0.10.1
    @author Christian Schwinne
  */
 
 // version code in format yymmddb (b = daily build)
-#define VERSION 2004061
+#define VERSION 2006251
 
 // ESP8266-01 (blue) got too little storage space to work with all features of WLED. To use it, you must use ESP8266 Arduino Core v2.4.2 and the setting 512K(No SPIFFS).
 
@@ -25,9 +25,11 @@
 //#define WLED_DISABLE_CRONIXIE    // saves 3kb
 //#define WLED_DISABLE_HUESYNC     // saves 4kb
 //#define WLED_DISABLE_INFRARED    // there is no pin left for this on ESP8266-01, saves 12kb
-#define WLED_ENABLE_MQTT            // saves 12kb
-#define WLED_ENABLE_ADALIGHT        // saves 500b only
-//#define WLED_ENABLE_DMX          // uses 3.5kb
+#ifndef WLED_DISABLE_MQTT
+  #define WLED_ENABLE_MQTT         // saves 12kb
+#endif
+#define WLED_ENABLE_ADALIGHT       // saves 500b only
+//#define WLED_ENABLE_DMX          // uses 3.5kb (use LEDPIN other than 2)
 
 #define WLED_DISABLE_FILESYSTEM        // SPIFFS is not used by any WLED feature yet
 //#define WLED_ENABLE_FS_SERVING   // Enable sending html file from SPIFFS before serving progmem version
@@ -76,6 +78,10 @@
   #include "src/dependencies/blynk/BlynkSimpleEsp.h"
 #endif
 
+#ifdef WLED_ENABLE_DMX
+  #include "src/dependencies/dmx/ESPDMX.h"
+#endif
+
 #include "src/dependencies/e131/ESPAsyncE131.h"
 #include "src/dependencies/async-mqtt-client/AsyncMqttClient.h"
 #include "src/dependencies/json/AsyncJson-v6.h"
@@ -109,10 +115,10 @@
   #include <IRutils.h>
 #endif
 
-// remove flicker because PWM signal of RGB channels can become out of phase
-#if defined(WLED_USE_ANALOG_LEDS) && defined(ESP8266)
-  #include "src/dependencies/arduino/core_esp8266_waveform.h"
-#endif
+// remove flicker because PWM signal of RGB channels can become out of phase (part of core as of Arduino core v2.7.0)
+//#if defined(WLED_USE_ANALOG_LEDS) && defined(ESP8266)
+//  #include "src/dependencies/arduino/core_esp8266_waveform.h"
+//#endif
 
 // enable additional debug output
 #ifdef WLED_DEBUG
@@ -148,7 +154,8 @@
 #endif
 
 // Global Variable definitions
-WLED_GLOBAL char versionString[] _INIT("0.9.1n");
+WLED_GLOBAL char versionString[] _INIT("0.10.1");
+#define WLED_CODENAME "Namigai"
 
 // AP and OTA default passwords (for maximum security change them!)
 WLED_GLOBAL char apPass[65]  _INIT(DEFAULT_AP_PASS);
@@ -186,8 +193,7 @@ WLED_GLOBAL byte briS     _INIT(128);                     // default brightness
 
 WLED_GLOBAL byte nightlightTargetBri _INIT(0);      // brightness after nightlight is over
 WLED_GLOBAL byte nightlightDelayMins _INIT(60);
-WLED_GLOBAL bool nightlightFade      _INIT(true);   // if enabled, light will gradually dim towards the target bri. Otherwise, it will instantly set after delay over
-WLED_GLOBAL bool nightlightColorFade _INIT(false);  // if enabled, light will gradually fade color from primary to secondary color.
+WLED_GLOBAL byte nightlightMode      _INIT(NL_MODE_FADE); // See const.h for available modes. Was nightlightFade
 WLED_GLOBAL bool fadeTransition      _INIT(true);   // enable crossfading color transition
 WLED_GLOBAL uint16_t transitionDelay _INIT(750);    // default crossfade duration in ms
 
@@ -215,7 +221,7 @@ WLED_GLOBAL bool notifyMacro  _INIT(false);                       // send notifi
 WLED_GLOBAL bool notifyHue    _INIT(true);                        // send notification if Hue light changes
 WLED_GLOBAL bool notifyTwice  _INIT(false);                       // notifications use UDP: enable if devices don't sync reliably
 
-WLED_GLOBAL bool alexaEnabled _INIT(true);                        // enable device discovery by Amazon Echo
+WLED_GLOBAL bool alexaEnabled _INIT(false);                       // enable device discovery by Amazon Echo
 WLED_GLOBAL char alexaInvocationName[33] _INIT("Light");          // speech control name of device. Choose something voice-to-text can understand
 
 WLED_GLOBAL char blynkApiKey[36] _INIT("");                       // Auth token for Blynk server. If empty, no connection will be made
@@ -226,7 +232,12 @@ WLED_GLOBAL bool receiveDirect _INIT(true);                       // receive UDP
 WLED_GLOBAL bool arlsDisableGammaCorrection _INIT(true);          // activate if gamma correction is handled by the source
 WLED_GLOBAL bool arlsForceMaxBri _INIT(false);                    // enable to force max brightness if source has very dark colors that would be black
 
+#ifdef WLED_ENABLE_DMX
+WLED_GLOBAL DMXESPSerial dmx;
+WLED_GLOBAL uint16_t e131ProxyUniverse _INIT(0);                  // output this E1.31 (sACN) / ArtNet universe via MAX485 (0 = disabled)
+#endif
 WLED_GLOBAL uint16_t e131Universe _INIT(1);                       // settings for E1.31 (sACN) protocol (only DMX_MODE_MULTIPLE_* can span over consequtive universes)
+WLED_GLOBAL uint16_t e131Port _INIT(5568);                        // DMX in port. E1.31 default is 5568, Art-Net is 6454
 WLED_GLOBAL byte DMXMode _INIT(DMX_MODE_MULTIPLE_RGB);            // DMX mode (s.a.)
 WLED_GLOBAL uint16_t DMXAddress _INIT(1);                         // DMX start address of fixture, a.k.a. first Channel [for E1.31 (sACN) protocol]
 WLED_GLOBAL byte DMXOldDimmer _INIT(0);                           // only update brightness on change
@@ -293,6 +304,7 @@ WLED_GLOBAL uint16_t userVar0 _INIT(0), userVar1 _INIT(0); //available for use i
   // assigns the different channels to different functions. See wled21_dmx.ino for more information.
   WLED_GLOBAL uint16_t DMXGap _INIT(10);          // gap between the fixtures. makes addressing easier because you don't have to memorize odd numbers when climbing up onto a rig.
   WLED_GLOBAL uint16_t DMXStart _INIT(10);        // start address of the first fixture
+  WLED_GLOBAL uint16_t DMXStartLED _INIT(0);      // LED from which DMX fixtures start
 #endif
 
 // internal global variable declarations
@@ -404,7 +416,7 @@ WLED_GLOBAL bool blynkEnabled _INIT(false);
 // preset cycling
 WLED_GLOBAL bool presetCyclingEnabled _INIT(false);
 WLED_GLOBAL byte presetCycleMin _INIT(1), presetCycleMax _INIT(5);
-WLED_GLOBAL uint16_t presetCycleTime _INIT(1250);
+WLED_GLOBAL uint16_t presetCycleTime _INIT(12);
 WLED_GLOBAL unsigned long presetCycledTime _INIT(0);
 WLED_GLOBAL byte presetCycCurr _INIT(presetCycleMin);
 WLED_GLOBAL bool presetApplyBri _INIT(true);
@@ -412,8 +424,10 @@ WLED_GLOBAL bool saveCurrPresetCycConf _INIT(false);
 
 // realtime
 WLED_GLOBAL byte realtimeMode _INIT(REALTIME_MODE_INACTIVE);
+WLED_GLOBAL byte realtimeOverride _INIT(REALTIME_OVERRIDE_NONE);
 WLED_GLOBAL IPAddress realtimeIP _INIT((0, 0, 0, 0));
 WLED_GLOBAL unsigned long realtimeTimeout _INIT(0);
+WLED_GLOBAL uint16_t tpmFirstFrameSize _INIT(0);
 
 // mqtt
 WLED_GLOBAL long lastMqttReconnectAttempt _INIT(0);
@@ -445,6 +459,7 @@ WLED_GLOBAL unsigned long ntpLastSyncTime _INIT(999000000L);
 WLED_GLOBAL unsigned long ntpPacketSentTime _INIT(999000000L);
 WLED_GLOBAL IPAddress ntpServerIP;
 WLED_GLOBAL uint16_t ntpLocalPort _INIT(2390);
+WLED_GLOBAL uint16_t rolloverMillis _INIT(0);
 
 // Temp buffer
 WLED_GLOBAL char* obuf;
@@ -477,6 +492,9 @@ WLED_GLOBAL bool e131NewData _INIT(false);
 // led fx library object
 WLED_GLOBAL WS2812FX strip _INIT(WS2812FX());
 
+// Usermod manager
+WLED_GLOBAL UsermodManager usermods _INIT(UsermodManager());
+
 // debug macro variable definitions
 #ifdef WLED_DEBUG
   WLED_GLOBAL unsigned long debugTime _INIT(0);
@@ -488,6 +506,7 @@ WLED_GLOBAL WS2812FX strip _INIT(WS2812FX());
 
 #define WLED_CONNECTED (WiFi.status() == WL_CONNECTED)
 #define WLED_WIFI_CONFIGURED (strlen(clientSSID) >= 1 && strcmp(clientSSID, DEFAULT_CLIENT_SSID) != 0)
+#define WLED_MQTT_CONNECTED (mqtt != nullptr && mqtt->connected())
 
 // append new c string to temp buffer efficiently
 bool oappend(const char* txt);

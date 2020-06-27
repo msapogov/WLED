@@ -5,14 +5,14 @@
  */
 
 //build XML response to HTTP /win API request
-char* XML_response(AsyncWebServerRequest *request, char* dest)
+void XML_response(AsyncWebServerRequest *request, char* dest)
 {
   char sbuf[(dest == nullptr)?1024:1]; //allocate local buffer if none passed
   obuf = (dest == nullptr)? sbuf:dest;
 
   olen = 0;
   oappend((const char*)F("<?xml version=\"1.0\" ?><vs><ac>"));
-  oappendi((nightlightActive && nightlightFade) ? briT : bri);
+  oappendi((nightlightActive && nightlightMode > NL_MODE_SET) ? briT : bri);
   oappend("</ac>");
 
   for (int i = 0; i < 3; i++)
@@ -34,7 +34,7 @@ char* XML_response(AsyncWebServerRequest *request, char* dest)
   oappend("</nr><nl>");
   oappendi(nightlightActive);
   oappend("</nl><nf>");
-  oappendi(nightlightFade);
+  oappendi(nightlightMode > NL_MODE_SET);
   oappend("</nf><nd>");
   oappendi(nightlightDelayMins);
   oappend("</nd><nt>");
@@ -63,9 +63,10 @@ char* XML_response(AsyncWebServerRequest *request, char* dest)
   if (realtimeMode)
   {
     String mesg = "Live ";
-    if (realtimeMode == REALTIME_MODE_E131)
+    if (realtimeMode == REALTIME_MODE_E131 || realtimeMode == REALTIME_MODE_ARTNET)
     {
-      mesg += "E1.31 mode ";
+      mesg += (realtimeMode == REALTIME_MODE_E131) ? "E1.31" : "Art-Net";
+      mesg += " mode ";
       mesg += DMXMode;
       mesg += F(" at DMX Address ");
       mesg += DMXAddress;
@@ -76,7 +77,7 @@ char* XML_response(AsyncWebServerRequest *request, char* dest)
         mesg += ".";
         mesg += realtimeIP[i];
       }
-    } else if (realtimeMode == REALTIME_MODE_UDP || realtimeMode == REALTIME_MODE_HYPERION) {
+    } else if (realtimeMode == REALTIME_MODE_UDP || realtimeMode == REALTIME_MODE_HYPERION || realtimeMode == REALTIME_MODE_TPM2NET) {
       mesg += "UDP from ";
       mesg += realtimeIP[0];
       for (int i = 1; i < 4; i++)
@@ -99,9 +100,9 @@ char* XML_response(AsyncWebServerRequest *request, char* dest)
   if (request != nullptr) request->send(200, "text/xml", obuf);
 }
 
-char* URL_response(AsyncWebServerRequest *request)
+void URL_response(AsyncWebServerRequest *request)
 {
-  char sbuf[256]; //allocate local buffer if none passed
+  char sbuf[256];
   char s2buf[100];
   obuf = s2buf;
   olen = 0;
@@ -300,7 +301,7 @@ void getSettingsJS(byte subPage, char* dest)
     sappend('v',"BF",briMultiplier);
     sappend('v',"TB",nightlightTargetBri);
     sappend('v',"TL",nightlightDelayMinsDefault);
-    sappend('c',"TW",nightlightFade);
+    sappend('v',"TW",nightlightMode);
     sappend('i',"PB",strip.paletteBlend);
     sappend('c',"RV",strip.reverseMode);
     sappend('c',"SL",skipFirstLed);
@@ -326,6 +327,7 @@ void getSettingsJS(byte subPage, char* dest)
     sappend('c',"SM",notifyMacro);
     sappend('c',"S2",notifyTwice);
     sappend('c',"RD",receiveDirect);
+    sappend('v',"EP",e131Port);
     sappend('c',"ES",e131SkipOutOfSequence);
     sappend('c',"EM",e131Multicast);
     sappend('v',"EU",e131Universe);
@@ -380,7 +382,7 @@ void getSettingsJS(byte subPage, char* dest)
       default: sprintf(hueErrorString,"Bridge Error %i",hueError);
     }
     
-    sappends('m',"(\"hms\")[0]",hueErrorString);
+    sappends('m',"(\"sip\")[0]",hueErrorString);
     #endif
   }
 
@@ -443,20 +445,23 @@ void getSettingsJS(byte subPage, char* dest)
     sappend('c',"NO",otaLock);
     sappend('c',"OW",wifiLock);
     sappend('c',"AO",aOtaEnabled);
-    sappends('m',"(\"msg\")[0]","WLED ");
+    sappends('m',"(\"sip\")[0]","WLED ");
     olen -= 2; //delete ";
     oappend(versionString);
     oappend(" (build ");
     oappendi(VERSION);
-    oappend(") OK\";");
+    oappend(")\";");
   }
   
   #ifdef WLED_ENABLE_DMX // include only if DMX is enabled
   if (subPage == 7)
   {
+    sappend('v',"PU",e131ProxyUniverse);
+    
     sappend('v',"CN",DMXChannels);
     sappend('v',"CG",DMXGap);
     sappend('v',"CS",DMXStart);
+    sappend('v',"SL",DMXStartLED);
     
     sappend('i',"CH1",DMXFixtureMap[0]);
     sappend('i',"CH2",DMXFixtureMap[1]);

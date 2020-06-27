@@ -7,7 +7,7 @@
  */
 
 //eeprom Version code, enables default settings instead of 0 init on update
-#define EEPVER 18
+#define EEPVER 21
 //0 -> old version, default
 //1 -> 0.4p 1711272 and up
 //2 -> 0.4p 1711302 and up
@@ -27,6 +27,9 @@
 //16-> 0.9.1
 //17-> 0.9.1-dmx
 //18-> 0.9.1-e131
+//19-> 0.9.1n
+//20-> 0.9.1p
+//21-> 0.10.1p
 
 void commit()
 {
@@ -84,7 +87,7 @@ void saveSettingsToEEPROM()
   writeStringToEEPROM(160,     apPass, 64);
 
   EEPROM.write(224, nightlightDelayMinsDefault);
-  EEPROM.write(225, nightlightFade);
+  EEPROM.write(225, nightlightMode);
   EEPROM.write(226, notifyDirectDefault);
   EEPROM.write(227, apChannel);
   EEPROM.write(228, apHide);
@@ -210,6 +213,14 @@ void saveSettingsToEEPROM()
   EEPROM.write(2181, macroNl);
   EEPROM.write(2182, macroDoublePress);
 
+  #ifdef WLED_ENABLE_DMX
+  EEPROM.write(2185, e131ProxyUniverse & 0xFF);
+  EEPROM.write(2186, (e131ProxyUniverse >> 8) & 0xFF);
+  #endif
+
+  EEPROM.write(2187, e131Port & 0xFF);
+  EEPROM.write(2188, (e131Port >> 8) & 0xFF);
+
   EEPROM.write(2189, e131SkipOutOfSequence);
   EEPROM.write(2190, e131Universe & 0xFF);
   EEPROM.write(2191, (e131Universe >> 8) & 0xFF);
@@ -300,7 +311,7 @@ void loadSettingsFromEEPROM(bool first)
 
   nightlightDelayMinsDefault = EEPROM.read(224);
   nightlightDelayMins = nightlightDelayMinsDefault;
-  nightlightFade = EEPROM.read(225);
+  nightlightMode = EEPROM.read(225);
   notifyDirectDefault = EEPROM.read(226);
   notifyDirect = notifyDirectDefault;
 
@@ -515,6 +526,18 @@ void loadSettingsFromEEPROM(bool first)
     e131SkipOutOfSequence = true;
   }
 
+  if (lastEEPROMversion > 18)
+  {
+    e131Port = EEPROM.read(2187) + ((EEPROM.read(2188) << 8) & 0xFF00);
+  }
+
+  #ifdef WLED_ENABLE_DMX
+  if (lastEEPROMversion > 19)
+  {
+    e131ProxyUniverse = EEPROM.read(2185) + ((EEPROM.read(2186) << 8) & 0xFF00);
+  }
+  #endif
+
   receiveDirect = !EEPROM.read(2200);
   notifyMacro = EEPROM.read(2201);
 
@@ -525,6 +548,7 @@ void loadSettingsFromEEPROM(bool first)
   {
     presetCyclingEnabled = EEPROM.read(2205);
     presetCycleTime = EEPROM.read(2206) + ((EEPROM.read(2207) << 8) & 0xFF00);
+    if (lastEEPROMversion < 21) presetCycleTime /= 100; //was stored in ms, now is in tenths of a second
     presetCycleMin = EEPROM.read(2208);
     presetCycleMax = EEPROM.read(2209);
     presetApplyBri = EEPROM.read(2210);
@@ -555,11 +579,14 @@ void loadSettingsFromEEPROM(bool first)
   
   for (int i=0;i<15;i++) {
     DMXFixtureMap[i] = EEPROM.read(2535+i);
-  } //last used: 2549. maybe leave a few bytes for future expansion and go on with 2600 kthxbye.
+  } //last used: 2549
+  EEPROM.write(2550, DMXStartLED);
   #endif
 
-  //user MOD memory
-  //2944 - 3071 reserved
+  //Usermod memory
+  //2551 - 2559 reserved for Usermods, usable by default
+  //2560 - 2943 usable, NOT reserved (need to increase EEPSIZE accordingly, new WLED core features may override this section)
+  //2944 - 3071 reserved for Usermods (need to increase EEPSIZE to 3072 in const.h)
 
   overlayCurrent = overlayDefault;
 
@@ -584,7 +611,7 @@ void savedToPresets()
       savedPresets &= ~(0x01 << (index-1));
     }
   }
-  if (EEPROM.read(700) == 2) {
+  if (EEPROM.read(700) == 2 || EEPROM.read(700) == 3) {
     savedPresets |= 0x01 << 15;
   } else
   {
@@ -601,8 +628,10 @@ bool applyPreset(byte index, bool loadBri)
   }
   if (index > 16 || index < 1) return false;
   uint16_t i = 380 + index*20;
+  byte ver = EEPROM.read(i);
+
   if (index < 16) {
-    if (EEPROM.read(i) != 1) return false;
+    if (ver != 1) return false;
     strip.applyToAllSelected = true;
     if (loadBri) bri = EEPROM.read(i+1);
     
@@ -618,11 +647,18 @@ bool applyPreset(byte index, bool loadBri)
     effectIntensity = EEPROM.read(i+16);
     effectPalette = EEPROM.read(i+17);
   } else {
-    if (EEPROM.read(i) != 2) return false;
+    if (ver != 2 && ver != 3) return false;
     strip.applyToAllSelected = false;
     if (loadBri) bri = EEPROM.read(i+1);
     WS2812FX::Segment* seg = strip.getSegments();
     memcpy(seg, EEPROM.getDataPtr() +i+2, 240);
+    if (ver == 2) { //versions before 2004230 did not have opacity
+      for (byte j = 0; j < strip.getMaxSegments(); j++)
+      {
+        strip.getSegment(j).opacity = 255;
+        strip.getSegment(j).setOption(SEG_OPTION_ON, 1);
+      }
+    }
     setValuesFromMainSeg();
   }
   currentPreset = index;
@@ -656,7 +692,7 @@ void savePreset(byte index, bool persist)
     EEPROM.write(i+16, effectIntensity);
     EEPROM.write(i+17, effectPalette);
   } else { //segment 16 can save segments
-    EEPROM.write(i, 2);
+    EEPROM.write(i, 3);
     EEPROM.write(i+1, bri);
     WS2812FX::Segment* seg = strip.getSegments();
     memcpy(EEPROM.getDataPtr() +i+2, seg, 240);

@@ -51,6 +51,7 @@ void WLED::loop()
   handleDMX();
 #endif
   userLoop();
+  usermods.loop();
 
   yield();
   handleIO();
@@ -67,7 +68,7 @@ void WLED::loop()
   if (doReboot)
     reset();
 
-  if (!realtimeMode)        // block stuff if WARLS/Adalight is enabled
+  if (!realtimeMode || realtimeOverride)  // block stuff if WARLS/Adalight is enabled
   {
     if (apActive)
       dnsServer.processNextRequest();
@@ -89,38 +90,34 @@ void WLED::loop()
 #ifdef ESP8266
   MDNS.update();
 #endif
-  if (millis() - lastMqttReconnectAttempt > 30000)
+  if (millis() - lastMqttReconnectAttempt > 30000) {
+    if (lastMqttReconnectAttempt > millis()) rolloverMillis++; //millis() rolls over every 50 days
     initMqtt();
+  }
+
 
 // DEBUG serial logging
 #ifdef WLED_DEBUG
   if (millis() - debugTime > 9999) {
     DEBUG_PRINTLN("---DEBUG INFO---");
-    DEBUG_PRINT("Runtime: ");
-    DEBUG_PRINTLN(millis());
-    DEBUG_PRINT("Unix time: ");
-    DEBUG_PRINTLN(now());
-    DEBUG_PRINT("Free heap: ");
-    DEBUG_PRINTLN(ESP.getFreeHeap());
-    DEBUG_PRINT("Wifi state: ");
-    DEBUG_PRINTLN(WiFi.status());
+    DEBUG_PRINT("Runtime: ");       DEBUG_PRINTLN(millis());
+    DEBUG_PRINT("Unix time: ");     DEBUG_PRINTLN(now());
+    DEBUG_PRINT("Free heap: ");     DEBUG_PRINTLN(ESP.getFreeHeap());
+    DEBUG_PRINT("Wifi state: ");    DEBUG_PRINTLN(WiFi.status());
+
     if (WiFi.status() != lastWifiState) {
       wifiStateChangedTime = millis();
     }
     lastWifiState = WiFi.status();
-    DEBUG_PRINT("State time: ");
-    DEBUG_PRINTLN(wifiStateChangedTime);
-    DEBUG_PRINT("NTP last sync: ");
-    DEBUG_PRINTLN(ntpLastSyncTime);
-    DEBUG_PRINT("Client IP: ");
-    DEBUG_PRINTLN(WiFi.localIP());
-    DEBUG_PRINT("Loops/sec: ");
-    DEBUG_PRINTLN(loops / 10);
+    DEBUG_PRINT("State time: ");    DEBUG_PRINTLN(wifiStateChangedTime);
+    DEBUG_PRINT("NTP last sync: "); DEBUG_PRINTLN(ntpLastSyncTime);
+    DEBUG_PRINT("Client IP: ");     DEBUG_PRINTLN(WiFi.localIP());
+    DEBUG_PRINT("Loops/sec: ");     DEBUG_PRINTLN(loops / 10);
     loops = 0;
     debugTime = millis();
   }
   loops++;
-#endif        // WLED_DEBU
+#endif        // WLED_DEBUG
 }
 
 void WLED::setup()
@@ -154,6 +151,7 @@ void WLED::setup()
   int heapPreAlloc = ESP.getFreeHeap();
   DEBUG_PRINT("heap ");
   DEBUG_PRINTLN(ESP.getFreeHeap());
+  registerUsermods();
 
   strip.init(EEPROM.read(372), ledCount, EEPROM.read(2204));        // init LEDs quickly
   strip.setBrightness(0);
@@ -172,6 +170,7 @@ void WLED::setup()
   loadSettingsFromEEPROM(true);
   beginStrip();
   userSetup();
+  usermods.setup();
   if (strcmp(clientSSID, DEFAULT_CLIENT_SSID) == 0)
     showWelcomePage = true;
   WiFi.persistent(false);
@@ -213,7 +212,7 @@ void WLED::setup()
   }
 #endif
 #ifdef WLED_ENABLE_DMX
-  dmx.init(512);        // initialize with bus length
+  initDMX();
 #endif
   // HTTP server page init
   initServer();
@@ -284,7 +283,7 @@ void WLED::initAP(bool resetAP)
 
 void WLED::initConnection()
 {
-  WiFi.disconnect();        // close old connections
+  WiFi.disconnect(true);        // close old connections
 #ifdef ESP8266
   WiFi.setPhyMode(WIFI_PHY_MODE_11N);
 #endif
@@ -308,6 +307,7 @@ void WLED::initConnection()
     } else {
       DEBUG_PRINTLN("Access point disabled.");
       WiFi.softAPdisconnect(true);
+      WiFi.mode(WIFI_STA);
     }
   }
   showWelcomePage = false;
@@ -371,7 +371,7 @@ void WLED::initInterfaces()
     ntpConnected = ntpUdp.begin(ntpLocalPort);
 
   initBlynk(blynkApiKey);
-  e131.begin((e131Multicast) ? E131_MULTICAST : E131_UNICAST, e131Universe, E131_MAX_UNIVERSE_COUNT);
+  e131.begin(e131Multicast, e131Port, e131Universe, E131_MAX_UNIVERSE_COUNT);
   reconnectHue();
   initMqtt();
   interfacesInited = true;
@@ -446,6 +446,7 @@ void WLED::handleConnection()
     DEBUG_PRINTLN(WiFi.localIP());
     initInterfaces();
     userConnected();
+    usermods.connected();
 
     // shut down AP
     if (apBehavior != AP_BEHAVIOR_ALWAYS && apActive) {

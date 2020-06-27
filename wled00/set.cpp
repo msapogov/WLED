@@ -103,7 +103,7 @@ void handleSettingsSet(AsyncWebServerRequest *request, byte subPage)
     t = request->arg("TL").toInt();
     if (t > 0) nightlightDelayMinsDefault = t;
     nightlightDelayMins = nightlightDelayMinsDefault;
-    nightlightFade = request->hasArg("TW");
+    nightlightMode = request->arg("TW").toInt();
 
     t = request->arg("PB").toInt();
     if (t >= 0 && t < 4) strip.paletteBlend = t;
@@ -142,10 +142,12 @@ void handleSettingsSet(AsyncWebServerRequest *request, byte subPage)
     receiveDirect = request->hasArg("RD");
     e131SkipOutOfSequence = request->hasArg("ES");
     e131Multicast = request->hasArg("EM");
+    t = request->arg("EP").toInt();
+    if (t > 0) e131Port = t;
     t = request->arg("EU").toInt();
-    if (t > 0  && t <= 63999) e131Universe = t;
+    if (t >= 0  && t <= 63999) e131Universe = t;
     t = request->arg("DA").toInt();
-    if (t > 0  && t <= 510) DMXAddress = t;
+    if (t >= 0  && t <= 510) DMXAddress = t;
     t = request->arg("DM").toInt();
     if (t >= DMX_MODE_DISABLED && t <= DMX_MODE_MULTIPLE_DRGB) DMXMode = t;
     t = request->arg("ET").toInt();
@@ -295,7 +297,10 @@ void handleSettingsSet(AsyncWebServerRequest *request, byte subPage)
   #ifdef WLED_ENABLE_DMX // include only if DMX is enabled
   if (subPage == 7)
   {
-    int t = request->arg("CN").toInt();
+    int t = request->arg("PU").toInt();
+    if (t >= 0  && t <= 63999) e131ProxyUniverse = t;
+
+    t = request->arg("CN").toInt();
     if (t>0 && t<16) {
       DMXChannels = t;
     }
@@ -306,6 +311,10 @@ void handleSettingsSet(AsyncWebServerRequest *request, byte subPage)
     t = request->arg("CG").toInt();
     if (t>0 && t<513) {
       DMXGap = t;
+    }
+    t = request->arg("SL").toInt();
+    if (t>=0 && t < MAX_LEDS) {
+      DMXStartLED = t;
     }
     for (int i=0; i<15; i++) {
       String argname = "CH" + String((i+1));
@@ -414,7 +423,16 @@ bool handleSet(AsyncWebServerRequest *request, const String& req)
 
   WS2812FX::Segment& mainseg = strip.getSegment(main);
   pos = req.indexOf("SV="); //segment selected
-  if (pos > 0) mainseg.setOption(0, (req.charAt(pos+3) != '0'));
+  if (pos > 0) {
+    byte t = getNumVal(&req, pos);
+    if (t == 2) {
+      for (uint8_t i = 0; i < strip.getMaxSegments(); i++)
+      {
+        strip.getSegment(i).setOption(SEG_OPTION_SELECTED, 0);
+      }
+    }
+    mainseg.setOption(SEG_OPTION_SELECTED, t);
+  }
 
   uint16_t startI = mainseg.start;
   uint16_t stopI = mainseg.stop;
@@ -459,7 +477,7 @@ bool handleSet(AsyncWebServerRequest *request, const String& req)
   pos = req.indexOf("PT="); //sets cycle time in ms
   if (pos > 0) {
     int v = getNumVal(&req, pos);
-    if (v > 49) presetCycleTime = v;
+    if (v > 100) presetCycleTime = v/100;
   }
 
   pos = req.indexOf("PA="); //apply brightness from preset
@@ -506,6 +524,12 @@ bool handleSet(AsyncWebServerRequest *request, const String& req)
   pos = req.indexOf("C2=");
   if (pos > 0) {
     colorFromDecOrHexString(colSec, (char*)req.substring(pos + 3).c_str());
+  }
+  pos = req.indexOf("C3=");
+  if (pos > 0) {
+    byte t[4];
+    colorFromDecOrHexString(t, (char*)req.substring(pos + 3).c_str());
+    strip.setColor(2, t[0], t[1], t[2], t[3]);
   }
 
   //set to random hue SR=0->1st SR=1->2nd
@@ -588,10 +612,11 @@ bool handleSet(AsyncWebServerRequest *request, const String& req)
   pos = req.indexOf("NF=");
   if (pos > 0)
   {
-    nightlightFade = (req.charAt(pos+3) != '0');
-    nightlightColorFade = (req.charAt(pos+3) == '2');  //NighLightColorFade can only be enabled via API or Macro with "NF=2"
+    nightlightMode = getNumVal(&req, pos);
+
     nightlightActiveOld = false; //re-init
   }
+  if (nightlightMode > NL_MODE_SUN) nightlightMode = NL_MODE_SUN;
 
   #if AUXPIN >= 0
   //toggle general purpose output
@@ -620,10 +645,18 @@ bool handleSet(AsyncWebServerRequest *request, const String& req)
 
   //Segment reverse
   pos = req.indexOf("RV=");
-  if (pos > 0) strip.getSegment(main).setOption(1, req.charAt(pos+3) != '0');
+  if (pos > 0) strip.getSegment(main).setOption(SEG_OPTION_REVERSED, req.charAt(pos+3) != '0');
 
-  //deactivate nightlight if target brightness is reached
-  if (bri == nightlightTargetBri) nightlightActive = false;
+  //Segment brightness/opacity
+  pos = req.indexOf("SB=");
+  if (pos > 0) {
+    byte segbri = getNumVal(&req, pos);
+    strip.getSegment(main).setOption(SEG_OPTION_ON, segbri);
+    if (segbri) {
+      strip.getSegment(main).opacity = segbri;
+    }
+  }
+
   //set time (unix timestamp)
   pos = req.indexOf("ST=");
   if (pos > 0) {
@@ -636,6 +669,15 @@ bool handleSet(AsyncWebServerRequest *request, const String& req)
     countdownTime = getNumVal(&req, pos);
     if (countdownTime - now() > 0) countdownOverTriggered = false;
   }
+
+  pos = req.indexOf("LO=");
+  if (pos > 0) {
+    realtimeOverride = getNumVal(&req, pos);
+    if (realtimeOverride > 2) realtimeOverride = REALTIME_OVERRIDE_ALWAYS;
+  }
+
+  pos = req.indexOf("RB");
+  if (pos > 0) doReboot = true;
 
   //cronixie
   #ifndef WLED_DISABLE_CRONIXIE
