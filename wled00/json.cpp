@@ -59,6 +59,7 @@ void deserializeSegment(JsonObject elem, byte it)
     //if (pal != seg.palette && pal < strip.getPaletteCount()) strip.setPalette(pal);
     seg.setOption(SEG_OPTION_SELECTED, elem["sel"] | seg.getOption(SEG_OPTION_SELECTED));
     seg.setOption(SEG_OPTION_REVERSED, elem["rev"] | seg.getOption(SEG_OPTION_REVERSED));
+    seg.setOption(SEG_OPTION_MIRROR  , elem["mi"]  | seg.getOption(SEG_OPTION_MIRROR  ));
 
     //temporary, strip object gets updated via colorUpdated()
     if (id == strip.getMainSegmentId()) {
@@ -73,6 +74,53 @@ void deserializeSegment(JsonObject elem, byte it)
       seg.intensity = elem["ix"] | seg.intensity;
       seg.palette = elem["pal"] | seg.palette;
     }
+
+    JsonArray iarr = elem["i"]; //set individual LEDs
+    if (!iarr.isNull()) {
+      strip.setPixelSegment(id);
+
+      //freeze and init to black
+      if (!seg.getOption(SEG_OPTION_FREEZE)) {
+        seg.setOption(SEG_OPTION_FREEZE, true);
+        strip.fill(0);
+      }
+
+      uint16_t start = 0, stop = 0;
+      byte set = 0; //0 nothing set, 1 start set, 2 range set
+
+      for (uint16_t i = 0; i < iarr.size(); i++) {
+        if(iarr[i].is<JsonInteger>()) {
+          if (!set) {
+            start = iarr[i];
+            set = 1;
+          } else {
+            stop = iarr[i];
+            set = 2;
+          }
+        } else {
+          JsonArray icol = iarr[i];
+          if (icol.isNull()) break;
+
+          byte sz = icol.size();
+          if (sz == 0 && sz > 4) break;
+
+          int rgbw[] = {0,0,0,0};
+          byte cp = copyArray(icol, rgbw);
+
+          if (set < 2) stop = start + 1;
+          for (uint16_t i = start; i < stop; i++) {
+            strip.setPixelColor(i, rgbw[0], rgbw[1], rgbw[2], rgbw[3]);
+          }
+          if (!set) start++;
+          set = 0;
+        }
+      }
+      strip.setPixelSegment(255);
+      strip.trigger();
+    } else { //return to regular effect
+      seg.setOption(SEG_OPTION_FREEZE, false);
+    }
+
   }
 }
 
@@ -215,12 +263,13 @@ void serializeSegment(JsonObject& root, WS2812FX::Segment& seg, byte id)
     }
 	}
 
-	root["fx"] = seg.mode;
-	root["sx"] = seg.speed;
-	root["ix"] = seg.intensity;
+	root["fx"]  = seg.mode;
+	root["sx"]  = seg.speed;
+	root["ix"]  = seg.intensity;
 	root["pal"] = seg.palette;
 	root["sel"] = seg.isSelected();
 	root["rev"] = seg.getOption(SEG_OPTION_REVERSED);
+  root["mi"]  = seg.getOption(SEG_OPTION_MIRROR);
 }
 
 
@@ -332,6 +381,12 @@ void serializeInfo(JsonObject root)
   } else {
     root["lip"] = realtimeIP.toString();
   }
+
+  #ifdef WLED_ENABLE_WEBSOCKETS
+  root["ws"] = ws.count();
+  #else
+  root["ws"] = -1;
+  #endif
 
   root["fxcount"] = strip.getModeCount();
   root["palcount"] = strip.getPaletteCount();
@@ -454,21 +509,37 @@ void serveJson(AsyncWebServerRequest* request)
 
 #define MAX_LIVE_LEDS 180
 
-void serveLiveLeds(AsyncWebServerRequest* request)
+bool serveLiveLeds(AsyncWebServerRequest* request, uint32_t wsClient)
 {
+  AsyncWebSocketClient * wsc;
+  if (!request) { //not HTTP, use Websockets
+    #ifdef WLED_ENABLE_WEBSOCKETS
+    wsc = ws.client(wsClient);
+    if (!wsc || wsc->queueLength() > 0) return false; //only send if queue free
+    #endif
+  }
+
   uint16_t used = ledCount;
   uint16_t n = (used -1) /MAX_LIVE_LEDS +1; //only serve every n'th LED if count over MAX_LIVE_LEDS
   char buffer[2000] = "{\"leds\":[";
-  olen = 9;
   obuf = buffer;
+  olen = 9;
 
   for (uint16_t i= 0; i < used; i += n)
   {
-    olen += sprintf(buffer + olen, "\"%06X\",", strip.getPixelColor(i));
+    olen += sprintf(obuf + olen, "\"%06X\",", strip.getPixelColor(i));
   }
   olen -= 1;
   oappend("],\"n\":");
   oappendi(n);
   oappend("}");
-  request->send(200, "application/json", buffer);
+  if (request) {
+    request->send(200, "application/json", buffer);
+  }
+  #ifdef WLED_ENABLE_WEBSOCKETS
+  else {
+    wsc->text(obuf, olen);
+  }
+  #endif
+  return true;
 }
