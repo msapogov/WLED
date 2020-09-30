@@ -1,5 +1,6 @@
 #include "wled.h"
 
+
 /*
  * Receives client input
  */
@@ -32,7 +33,7 @@ void handleSettingsSet(AsyncWebServerRequest *request, byte subPage)
 {
 
   //0: menu 1: wifi 2: leds 3: ui 4: sync 5: time 6: sec 7: DMX
-  if (subPage <1 || subPage >7) return;
+  if (subPage <1 || subPage >8) return;
 
   //WIFI SETTINGS
   if (subPage == 1)
@@ -80,7 +81,7 @@ void handleSettingsSet(AsyncWebServerRequest *request, byte subPage)
     #endif
     strip.ablMilliampsMax = request->arg(F("MA")).toInt();
     strip.milliampsPerLed = request->arg(F("LA")).toInt();
-    
+
     useRGBW = request->hasArg(F("EW"));
     strip.colorOrder = request->arg(F("CO")).toInt();
     strip.rgbwMode = request->arg(F("AW")).toInt();
@@ -112,6 +113,12 @@ void handleSettingsSet(AsyncWebServerRequest *request, byte subPage)
     skipFirstLed = request->hasArg(F("SL"));
     t = request->arg(F("BF")).toInt();
     if (t > 0) briMultiplier = t;
+
+    #ifndef ESP8266
+    strip.matrixWidth = request->arg(F("LCW")).toInt();
+    strip.matrixHeight = request->arg(F("LCH")).toInt();
+    strip.matrixSerpentine = request->hasArg(F("LCWHS"));
+    #endif // ESP8266
   }
 
   //UI
@@ -128,6 +135,8 @@ void handleSettingsSet(AsyncWebServerRequest *request, byte subPage)
     irEnabled = request->arg(F("IR")).toInt();
     int t = request->arg(F("UP")).toInt();
     if (t > 0) udpPort = t;
+    t = request->arg(F("U2")).toInt();
+    if (t > 0) udpPort2 = t;
     receiveNotificationBrightness = request->hasArg(F("RB"));
     receiveNotificationColor = request->hasArg(F("RC"));
     receiveNotificationEffects = request->hasArg(F("RX"));
@@ -164,6 +173,28 @@ void handleSettingsSet(AsyncWebServerRequest *request, byte subPage)
     if (request->hasArg("BK") && !request->arg("BK").equals(F("Hidden"))) {
       strlcpy(blynkApiKey, request->arg("BK").c_str(), 36); initBlynk(blynkApiKey);
     }
+    t = request->arg(F("ASE")).toInt();
+    if (t == 0) {
+      // 0 == udp audio sync off
+      Serial.print("Setting audio sync settings");
+      audioSyncEnabled &= ~(1 << 0);
+      audioSyncEnabled &= ~(1 << 1);
+    }
+    else if (t == 1) {
+      // 1 == transmit only
+      Serial.print("Setting audio sync settings");
+      audioSyncEnabled |= 1 << 0;
+      audioSyncEnabled &= ~(1 << 1);
+    }
+    else if (t == 2) {
+      // 2 == receive only
+      Serial.print("Setting audio sync settings");
+      audioSyncEnabled &= ~(1 << 0);
+      audioSyncEnabled |= 1 << 1;
+    }
+    Serial.print(audioSyncEnabled);
+    t = request->arg(F("ASP")).toInt();
+    audioSyncPort = t;
 
     #ifdef WLED_ENABLE_MQTT
     mqttEnabled = request->hasArg(F("MQ"));
@@ -323,15 +354,25 @@ void handleSettingsSet(AsyncWebServerRequest *request, byte subPage)
       DMXFixtureMap[i] = t;
     }
   }
-  
   #endif
+
+  //SOUND SETTINGS
+  if (subPage == 8)
+  {
+    int t;
+    t = request->arg(F("SQ")).toInt();
+    if (t >= 0) soundSquelch = t;
+
+    t = request->arg(F("GN")).toInt();
+    if (t >= 0) sampleGain = t;
+  }
+
   if (subPage != 6 || !doReboot) saveSettingsToEEPROM(); //do not save if factory reset
   if (subPage == 2) {
     strip.init(useRGBW,ledCount,skipFirstLed);
   }
   if (subPage == 4) alexaInit();
 }
-
 
 
 //helper to get int value at a position in string
@@ -507,6 +548,27 @@ bool handleSet(AsyncWebServerRequest *request, const String& req)
   updateVal(&req, "B2=", &colSec[2]);
   updateVal(&req, "W2=", &colSec[3]);
 
+  #ifdef WLED_ENABLE_LOXONE
+  //lox parser
+  pos = req.indexOf(F("LX=")); // Lox primary color
+  if (pos > 0) {
+    int lxValue = getNumVal(&req, pos);
+    if (parseLx(lxValue, col)) {
+      bri = 255;
+      nightlightActive = false; //always disable nightlight when toggling
+    }
+  }
+  pos = req.indexOf(F("LY=")); // Lox secondary color
+  if (pos > 0) {
+    int lxValue = getNumVal(&req, pos);
+    if(parseLx(lxValue, colSec)) {
+      bri = 255;
+      nightlightActive = false; //always disable nightlight when toggling
+    }
+  }
+
+  #endif
+
   //set hue
   pos = req.indexOf(F("HU="));
   if (pos > 0) {
@@ -517,6 +579,12 @@ bool handleSet(AsyncWebServerRequest *request, const String& req)
       tempsat = getNumVal(&req, pos);
     }
     colorHStoRGB(temphue,tempsat,(req.indexOf(F("H2"))>0)? colSec:col);
+  }
+
+  //set white spectrum (kelvin)
+  pos = req.indexOf(F("&K="));
+  if (pos > 0) {
+    colorKtoRGB(getNumVal(&req, pos),(req.indexOf(F("K2"))>0)? colSec:col);
   }
 
   //set color from HEX or 32bit DEC
@@ -557,6 +625,9 @@ bool handleSet(AsyncWebServerRequest *request, const String& req)
   if (updateVal(&req, "FX=", &effectCurrent, 0, strip.getModeCount()-1)) presetCyclingEnabled = false;
   updateVal(&req, "SX=", &effectSpeed);
   updateVal(&req, "IX=", &effectIntensity);
+  updateVal(&req, "F1=", &effectFFT1);
+  updateVal(&req, "F2=", &effectFFT2);
+  updateVal(&req, "F3=", &effectFFT3);
   updateVal(&req, "FP=", &effectPalette, 0, strip.getPaletteCount()-1);
 
   //set advanced overlay
@@ -691,7 +762,7 @@ bool handleSet(AsyncWebServerRequest *request, const String& req)
   //mode, 1 countdown
   pos = req.indexOf(F("NM="));
   if (pos > 0) countdownMode = (req.charAt(pos+3) != '0');
-  
+
   pos = req.indexOf(F("NX=")); //sets digits to code
   if (pos > 0) {
     strlcpy(cronixieDisplay, req.substring(pos + 3, pos + 9).c_str(), 6);
@@ -717,12 +788,16 @@ bool handleSet(AsyncWebServerRequest *request, const String& req)
   }
   //you can add more if you need
 
+  pos = req.indexOf(F("DX=")); // delay in ms  050720 ajn
+  if (pos > 0) delay(getNumVal(&req,pos));
+
   //internal call, does not send XML response
   pos = req.indexOf(F("IN"));
   if (pos < 1) XML_response(request);
 
   pos = req.indexOf(F("&NN")); //do not send UDP notifications this time
   colorUpdated((pos > 0) ? NOTIFIER_CALL_MODE_NO_NOTIFY : NOTIFIER_CALL_MODE_DIRECT_CHANGE);
+
 
   return true;
 }

@@ -28,9 +28,9 @@ void deserializeSegment(JsonObject elem, byte it)
       seg.opacity = segbri;
       seg.setOption(SEG_OPTION_ON, 1);
     }
-  
+
     seg.setOption(SEG_OPTION_ON, elem["on"] | seg.getOption(SEG_OPTION_ON));
-    
+
     JsonArray colarr = elem[F("col")];
     if (!colarr.isNull())
     {
@@ -43,10 +43,17 @@ void deserializeSegment(JsonObject elem, byte it)
         {
           int rgbw[] = {0,0,0,0};
           byte cp = copyArray(colX, rgbw);
-          
-          if (cp == 1 && rgbw[0] == 0) seg.colors[i] = 0;
+
+          if (cp == 1) {
+            if (rgbw[0] == 0) seg.colors[i] = 0;
+            else {
+              byte ctrgb[] = {0,0,0,0};
+              colorKtoRGB(rgbw[0], ctrgb);
+              for (uint8_t c = 0; c < 3; c++) rgbw[c] = ctrgb[c];
+            }
+          }
           if (id == strip.getMainSegmentId() && i < 2) //temporary, to make transition work on main segment
-          { 
+          {
             if (i == 0) {col[0] = rgbw[0]; col[1] = rgbw[1]; col[2] = rgbw[2]; col[3] = rgbw[3];}
             if (i == 1) {colSec[0] = rgbw[0]; colSec[1] = rgbw[1]; colSec[2] = rgbw[2]; colSec[3] = rgbw[3];}
           } else {
@@ -55,7 +62,19 @@ void deserializeSegment(JsonObject elem, byte it)
         }
       }
     }
-    
+
+    // lx parser
+    #ifdef WLED_ENABLE_LOXONE
+    int lx = elem[F("lx")] | -1;
+    if (lx > 0) {
+      parseLxJson(lx, id, false);
+    }
+    int ly = elem[F("ly")] | -1;
+    if (ly > 0) {
+      parseLxJson(ly, id, true);
+    }
+    #endif
+
     //if (pal != seg.palette && pal < strip.getPaletteCount()) strip.setPalette(pal);
     seg.setOption(SEG_OPTION_SELECTED, elem[F("sel")] | seg.getOption(SEG_OPTION_SELECTED));
     seg.setOption(SEG_OPTION_REVERSED, elem[F("rev")] | seg.getOption(SEG_OPTION_REVERSED));
@@ -66,12 +85,18 @@ void deserializeSegment(JsonObject elem, byte it)
       effectCurrent = elem[F("fx")] | effectCurrent;
       effectSpeed = elem[F("sx")] | effectSpeed;
       effectIntensity = elem[F("ix")] | effectIntensity;
+      effectFFT1 = elem[F("f1x")] | effectFFT1;
+      effectFFT2 = elem[F("f2x")] | effectFFT2;
+      effectFFT3 = elem[F("f3x")] | effectFFT3;
       effectPalette = elem[F("pal")] | effectPalette;
     } else { //permanent
       byte fx = elem[F("fx")] | seg.mode;
       if (fx != seg.mode && fx < strip.getModeCount()) strip.setMode(id, fx);
       seg.speed = elem[F("sx")] | seg.speed;
       seg.intensity = elem[F("ix")] | seg.intensity;
+      seg.fft1 = elem[F("f1x")] | seg.fft1;
+      seg.fft2 = elem[F("f2x")] | seg.fft2;
+      seg.fft3 = elem[F("f3x")] | seg.fft3;
       seg.palette = elem[F("pal")] | seg.palette;
     }
 
@@ -131,9 +156,9 @@ bool deserializeState(JsonObject root)
 
   int ps = root[F("ps")] | -1;
   if (ps >= 0) applyPreset(ps);
-  
+
   bri = root["bri"] | bri;
-  
+
   bool on = root["on"] | (bri > 0);
   if (!on != !bri) toggleOnOff();
 
@@ -151,7 +176,7 @@ bool deserializeState(JsonObject root)
     transitionDelayTemp *= 100;
     jsonTransitionOnce = true;
   }
-  
+
   int cy = root[F("pl")] | -2;
   if (cy > -2) presetCyclingEnabled = (cy >= 0);
   JsonObject ccnf = root[F("ccnf")];
@@ -188,7 +213,7 @@ bool deserializeState(JsonObject root)
   if (segVar.is<JsonObject>())
   {
     int id = segVar[F("id")] | -1;
-    
+
     if (id < 0) { //set all selected segments
       bool didSet = false;
       byte lowestActive = 99;
@@ -243,16 +268,16 @@ void serializeSegment(JsonObject& root, WS2812FX::Segment& seg, byte id)
   root["bri"] = (segbri) ? segbri : 255;
 
 	JsonArray colarr = root.createNestedArray("col");
-  
+
 	for (uint8_t i = 0; i < 3; i++)
 	{
 		JsonArray colX = colarr.createNestedArray();
     if (id == strip.getMainSegmentId() && i < 2) //temporary, to make transition work on main segment
     {
       if (i == 0) {
-        colX.add(col[0]); colX.add(col[1]); colX.add(col[2]); if (useRGBW) colX.add(col[3]); 
+        colX.add(col[0]); colX.add(col[1]); colX.add(col[2]); if (useRGBW) colX.add(col[3]);
       } else {
-         colX.add(colSec[0]); colX.add(colSec[1]); colX.add(colSec[2]); if (useRGBW) colX.add(colSec[3]); 
+         colX.add(colSec[0]); colX.add(colSec[1]); colX.add(colSec[2]); if (useRGBW) colX.add(colSec[3]);
       }
     } else {
   		colX.add((seg.colors[i] >> 16) & 0xFF);
@@ -263,9 +288,12 @@ void serializeSegment(JsonObject& root, WS2812FX::Segment& seg, byte id)
     }
 	}
 
-	root[F("fx")]  = seg.mode;
-	root[F("sx")]  = seg.speed;
-	root[F("ix")]  = seg.intensity;
+	root[F("fx")] = seg.mode;
+	root[F("sx")] = seg.speed;
+	root[F("ix")] = seg.intensity;
+  root[F("f1x")] = seg.fft1;
+  root[F("f2x")] = seg.fft2;
+  root[F("f3x")] = seg.fft3;
 	root[F("pal")] = seg.palette;
 	root[F("sel")] = seg.isSelected();
 	root[F("rev")] = seg.getOption(SEG_OPTION_REVERSED);
@@ -276,7 +304,7 @@ void serializeSegment(JsonObject& root, WS2812FX::Segment& seg, byte id)
 void serializeState(JsonObject root)
 {
   if (errorFlag) root[F("error")] = errorFlag;
-  
+
   root["on"] = (bri > 0);
   root["bri"] = briLast;
   root[F("transition")] = transitionDelay/100; //in 100ms
@@ -292,14 +320,14 @@ void serializeState(JsonObject root)
   ccnf[F("min")] = presetCycleMin;
   ccnf[F("max")] = presetCycleMax;
   ccnf[F("time")] = presetCycleTime;
-  
+
   JsonObject nl = root.createNestedObject("nl");
   nl["on"] = nightlightActive;
   nl[F("dur")] = nightlightDelayMins;
   nl[F("fade")] = (nightlightMode > NL_MODE_SET); //deprecated
   nl[F("mode")] = nightlightMode;
   nl[F("tbri")] = nightlightTargetBri;
-  
+
   JsonObject udpn = root.createNestedObject("udpn");
   udpn[F("send")] = notifyDirect;
   udpn[F("recv")] = receiveNotifications;
@@ -307,7 +335,7 @@ void serializeState(JsonObject root)
   root[F("lor")] = realtimeOverride;
 
   root[F("mainseg")] = strip.getMainSegmentId();
-  
+
   JsonArray seg = root.createNestedArray("seg");
   for (byte s = 0; s < strip.getMaxSegments(); s++)
   {
@@ -345,21 +373,21 @@ void serializeInfo(JsonObject root)
   root[F("ver")] = versionString;
   root[F("vid")] = VERSION;
   //root[F("cn")] = WLED_CODENAME;
-  
+
   JsonObject leds = root.createNestedObject("leds");
   leds[F("count")] = ledCount;
   leds[F("rgbw")] = useRGBW;
   leds[F("wv")] = useRGBW && (strip.rgbwMode == RGBW_MODE_MANUAL_ONLY || strip.rgbwMode == RGBW_MODE_DUAL); //should a white channel slider be displayed?
   JsonArray leds_pin = leds.createNestedArray("pin");
   leds_pin.add(LEDPIN);
-  
+
   leds[F("pwr")] = strip.currentMilliamps;
   leds[F("maxpwr")] = (strip.currentMilliamps)? strip.ablMilliampsMax : 0;
   leds[F("maxseg")] = strip.getMaxSegments();
   leds[F("seglock")] = false; //will be used in the future to prevent modifications to segment config
 
   root[F("str")] = syncToggleReceive;
-  
+
   root[F("name")] = serverDescription;
   root[F("udpport")] = udpPort;
   root[F("live")] = (bool)realtimeMode;
@@ -373,6 +401,7 @@ void serializeInfo(JsonObject root)
     case REALTIME_MODE_ADALIGHT: root["lm"] = F("USB Adalight/TPM2"); break;
     case REALTIME_MODE_ARTNET:   root["lm"] = F("Art-Net"); break;
     case REALTIME_MODE_TPM2NET:  root["lm"] = F("tpm2.net"); break;
+    case REALTIME_MODE_DDP:      root["lm"] = F("DDP"); break;
   }
 
   if (realtimeIP[0] == 0)
@@ -397,7 +426,7 @@ void serializeInfo(JsonObject root)
   wifi_info[F("rssi")] = qrssi;
   wifi_info[F("signal")] = getSignalQuality(qrssi);
   wifi_info[F("channel")] = WiFi.channel();
-  
+
   #ifdef ARDUINO_ARCH_ESP32
   #ifdef WLED_DEBUG
     wifi_info[F("txPower")] = (int) WiFi.getTxPower();
@@ -420,12 +449,12 @@ void serializeInfo(JsonObject root)
   #endif
   root[F("lwip")] = LWIP_VERSION_MAJOR;
   #endif
-  
+
   root[F("freeheap")] = ESP.getFreeHeap();
   root[F("uptime")] = millis()/1000 + rolloverMillis*4294967;
 
   usermods.addToJsonInfo(root);
-  
+
   byte os = 0;
   #ifdef WLED_DEBUG
   os  = 0x80;
@@ -448,14 +477,14 @@ void serializeInfo(JsonObject root)
   #ifdef WLED_ENABLE_ADALIGHT
   os += 0x02;
   #endif
-  #ifndef WLED_DISABLE_OTA 
+  #ifndef WLED_DISABLE_OTA
   os += 0x01;
   #endif
   root[F("opt")] = os;
-  
+
   root[F("brand")] = "WLED";
   root[F("product")] = F("FOSS");
-  root[F("mac")] = escapedMac;
+  root["mac"] = escapedMac;
 }
 
 void serveJson(AsyncWebServerRequest* request)
@@ -481,7 +510,7 @@ void serveJson(AsyncWebServerRequest* request)
     request->send(  501, "application/json", F("{\"error\":\"Not implemented\"}"));
     return;
   }
-  
+
   AsyncJsonResponse* response = new AsyncJsonResponse(JSON_BUFFER_SIZE);
   JsonObject doc = response->getRoot();
 
@@ -502,7 +531,7 @@ void serveJson(AsyncWebServerRequest* request)
         doc[F("palettes")] = serialized((const __FlashStringHelper*)JSON_palette_names);
       }
   }
-  
+
   response->setLength();
   request->send(response);
 }

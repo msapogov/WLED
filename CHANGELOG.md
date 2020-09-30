@@ -2,6 +2,20 @@
 
 ### Development versions after the 0.10.2 release
 
+#### Build 2009290
+
+-   Added basic DDP protocol support
+-   Added Washing Machine effect (PR #1208)
+
+#### Build 2009260
+
+-   Added Loxone parser (PR #1185)
+-   Added support for kelvin input via `K=` HTTP and `"col":[[val]]` JSON API calls
+-   Added supplementary UDP socket (#1205)
+-   TMP2.net receivable by default
+-   UDP sockets accept HTTP and JSON API commands
+-   Fixed missing timezones (#1201)
+
 #### Build 2009202
 
 -   Fixed LPD8806 compilation
@@ -242,6 +256,25 @@
 #### Build 2003222
 
 -   Fixed Alexa Whites on non-RGBW lights (bump Espalexa to 2.4.5)
+
+#### Build 2003262
+
+  - Fixed compilation for Analog LEDs
+  - Fixed sync settings network port fields too small
+
+#### Build 2003261
+
+  - Fixed live preview not displaying whole light if over 255 LEDs
+
+#### Build 2003251
+
+  - Added Pacifica effect (tentative, doesn't yet support other colors)
+  - Added Atlantica palette
+  - Fixed ESP32 build of Espalexa
+
+#### Build 2003222
+
+  - Fixed Alexa Whites on non-RGBW lights (bump Espalexa to 2.4.5)
 
 #### Build 2003221
 

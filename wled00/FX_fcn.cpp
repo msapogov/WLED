@@ -333,11 +333,11 @@ uint8_t WS2812FX::getPaletteCount()
 
 //TODO transitions
 
+bool WS2812FX::setEffectConfig(uint8_t m, uint8_t s, uint8_t in, uint8_t f1, uint8_t f2, uint8_t f3, uint8_t p) {
 
-bool WS2812FX::setEffectConfig(uint8_t m, uint8_t s, uint8_t in, uint8_t p) {
   uint8_t mainSeg = getMainSegmentId();
   Segment& seg = _segments[getMainSegmentId()];
-  uint8_t modePrev = seg.mode, speedPrev = seg.speed, intensityPrev = seg.intensity, palettePrev = seg.palette;
+  uint8_t modePrev = seg.mode, speedPrev = seg.speed, intensityPrev = seg.intensity, fft1Prev = seg.fft1, fft2Prev = seg.fft2, fft3Prev = seg.fft3, palettePrev = seg.palette;
 
   bool applied = false;
   
@@ -348,6 +348,9 @@ bool WS2812FX::setEffectConfig(uint8_t m, uint8_t s, uint8_t in, uint8_t p) {
       {
         _segments[i].speed = s;
         _segments[i].intensity = in;
+        _segments[i].fft1 = f1;
+        _segments[i].fft2 = f2;
+        _segments[i].fft3 = f3;
         _segments[i].palette = p;
         setMode(i, m);
         applied = true;
@@ -358,11 +361,14 @@ bool WS2812FX::setEffectConfig(uint8_t m, uint8_t s, uint8_t in, uint8_t p) {
   if (!applyToAllSelected || !applied) {
     seg.speed = s;
     seg.intensity = in;
+    seg.fft1 = f1;
+    seg.fft2 = f2;
+    seg.fft3 = f3;
     seg.palette = p;
     setMode(mainSegment, m);
   }
-  
-  if (seg.mode != modePrev || seg.speed != speedPrev || seg.intensity != intensityPrev || seg.palette != palettePrev) return true;
+
+  if (seg.mode != modePrev || seg.speed != speedPrev || seg.intensity != intensityPrev || seg.fft1 != fft1Prev || seg.fft2 != fft2Prev || seg.fft3 != fft3Prev || seg.palette != palettePrev) return true;
   return false;
 }
 
@@ -634,6 +640,33 @@ void WS2812FX::blendPixelColor(uint16_t n, uint32_t color, uint8_t blend)
 /*
  * fade out function, higher rate = quicker fade
  */
+void WS2812FX::fade2black(uint8_t rate) {
+  uint32_t color;
+  
+  //rate = rate >> 1;
+  float mappedRate = (float) map(rate, 0, 255, 1, 100) ;
+
+  mappedRate = mappedRate / 100;
+  
+  for(uint16_t i = 0; i < SEGLEN; i++) {
+    color = getPixelColor(i);
+    int w1 = (color >> 24) & 0xff;
+    int r1 = (color >> 16) & 0xff;
+    int g1 = (color >>  8) & 0xff;
+    int b1 =  color        & 0xff;
+
+    int w = w1 * mappedRate;
+    int r = r1 * (mappedRate * 1.05);      // acount for the fact that leds stay red on much lower intensities
+    int g = g1 * mappedRate;
+    int b = b1 * mappedRate;
+    
+    setPixelColor(i, r, g, b, w);
+  }
+}
+
+/*
+ * fade out function, higher rate = quicker fade
+ */
 void WS2812FX::fade_out(uint8_t rate) {
   rate = (255-rate) >> 1;
   float mappedRate = float(rate) +1.1;
@@ -697,6 +730,32 @@ uint16_t WS2812FX::triwave16(uint16_t in)
 {
   if (in < 0x8000) return in *2;
   return 0xFFFF - (in - 0x8000)*2;
+}
+
+/*
+ * Generates a tristate square wave w/ attac & decay 
+ * @param x input value 0-255
+ * @param pulsewidth 0-127 
+ * @param attdec attac & decay, max. pulsewidth / 2
+ * @returns signed waveform value
+ */
+int8_t WS2812FX::tristate_square8(uint8_t x, uint8_t pulsewidth, uint8_t attdec) {
+  int8_t a = 127;
+  if (x > 127) {
+    a = -127;
+    x -= 127;
+  }
+
+  if (x < attdec) { //inc to max
+    return (int16_t) x * a / attdec;
+  }
+  else if (x < pulsewidth - attdec) { //max
+    return a;
+  }  
+  else if (x < pulsewidth) { //dec to 0
+    return (int16_t) (pulsewidth - x) * a / attdec;
+  }
+  return 0;
 }
 
 /*
@@ -844,7 +903,7 @@ void WS2812FX::handle_palette(void)
       load_gradient_palette(paletteIndex -13);
   }
   
-  if (singleSegmentMode && paletteFade) //only blend if just one segment uses FastLED mode
+  if (singleSegmentMode && paletteFade && SEGENV.call > 0) //only blend if just one segment uses FastLED mode
   {
     nblendPaletteTowardPalette(currentPalette, targetPalette, 48);
   } else
@@ -886,6 +945,9 @@ bool WS2812FX::segmentsAreIdentical(Segment* a, Segment* b)
   if (a->mode != b->mode) return false;
   if (a->speed != b->speed) return false;
   if (a->intensity != b->intensity) return false;
+  if (a->fft1 != b->fft1) return false;
+  if (a->fft2 != b->fft2) return false;
+  if (a->fft3 != b->fft3) return false;
   if (a->palette != b->palette) return false;
   //if (a->getOption(SEG_OPTION_REVERSED) != b->getOption(SEG_OPTION_REVERSED)) return false;
   return true;
