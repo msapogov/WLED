@@ -9,4 +9,3 @@
 .gitignore
 .clang-format
 node_modules
-extra_script.py
