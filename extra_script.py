@@ -18,7 +18,6 @@ for x in my_flags.get("CPPDEFINES"):
         k, v = x
         if k == "VERSION":
             version_from_buildflags = v
-            build_number = "2010290"
             # no need to iterate further
             break
 
