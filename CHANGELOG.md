@@ -2,6 +2,15 @@
 
 ### Development versions after the 0.10.2 release
 
+#### Build 2011040
+
+-   Inversed Rain direction (fixes #1147)
+
+#### Build 2011010
+
+-   Re-added previous C9 palette
+-   Renamed new C9 palette
+
 #### Build 2010290
 
 -   Colorful effect now supports palettes
