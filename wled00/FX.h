@@ -650,6 +650,7 @@ class WS2812FX {
     void handle_palette(void);
 
     bool
+      shouldStartBus = false,
       _useRgbw = false,
       _skipFirstMode,
       _triggered;
@@ -728,7 +729,7 @@ const char JSON_palette_names[] PROGMEM = R"=====([
 "Pastel","Sunset 2","Beech","Vintage","Departure","Landscape","Beach","Sherbet","Hult","Hult 64",
 "Drywet","Jul","Grintage","Rewhi","Tertiary","Fire","Icefire","Cyane","Light Pink","Autumn",
 "Magenta","Magred","Yelmag","Yelblu","Orange & Teal","Tiamat","April Night","Orangery","C9","Sakura",
-"Aurora","Atlantica"
+"Aurora","Atlantica","C9 2","C9 New"
 ])=====";
 
 #endif
