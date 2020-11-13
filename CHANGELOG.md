@@ -2,6 +2,14 @@
 
 ### Development versions after the 0.10.2 release
 
+#### Build 2011120
+
+-   Added the ability for the /api MQTT topic to receive JSON API payloads
+
+#### Build 2011040
+
+-   Inversed Rain direction (fixes #1147)
+
 #### Build 2011010
 
 -   Re-added previous C9 palette
