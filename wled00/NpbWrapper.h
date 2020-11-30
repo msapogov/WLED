@@ -94,6 +94,13 @@
     #define WPIN 4   //W pin for analog LED strip
     #define W2PIN 5  //W2 pin for analog LED strip
     #undef IRPIN
+  #elif defined(WLED_USE_SHELLY_RGBW2)
+  // PWM pins - to use with esp_rgbww_controller from patrickjahns/pljakobs (https://github.com/pljakobs/esp_rgbww_controller)
+    #define RPIN 12  //R pin for analog LED strip
+    #define GPIN 15  //G pin for analog LED strip
+    #define BPIN 14  //B pin for analog LED strip
+    #define WPIN 4   //W pin for analog LED strip
+    #undef IRPIN
   #else
   //Enable override of Pins by using the platformio_override.ini file
   //PWM pins - PINs 5,12,13,15 are used with Magic Home LED Controller
