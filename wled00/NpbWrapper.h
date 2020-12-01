@@ -95,7 +95,7 @@
     #define W2PIN 5  //W2 pin for analog LED strip
     #undef IRPIN
   #elif defined(WLED_USE_SHELLY_RGBW2)
-  // PWM pins - to use with esp_rgbww_controller from patrickjahns/pljakobs (https://github.com/pljakobs/esp_rgbww_controller)
+  // PWM pins - to use with Shelly RGBW2 information and pinout (https://tasmota.github.io/docs/devices/Shelly-RGBW2/)
     #define RPIN 12  //R pin for analog LED strip
     #define GPIN 15  //G pin for analog LED strip
     #define BPIN 14  //B pin for analog LED strip
