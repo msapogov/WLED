@@ -91,6 +91,7 @@ void deserializeConfig() {
   CJSON(strip.ablMilliampsMax, hw_led[F("maxpwr")]);
   CJSON(strip.milliampsPerLed, hw_led[F("ledma")]);
   CJSON(strip.reverseMode, hw_led[F("rev")]);
+  CJSON(strip.rgbwMode, hw_led[F("rgbwm")]);
 
   JsonObject hw_led_ins_0 = hw_led[F("ins")][0];
   //bool hw_led_ins_0_en = hw_led_ins_0[F("en")]; // true
@@ -278,11 +279,13 @@ void deserializeConfig() {
     CJSON(timerMacro[it], timer[F("macro")]);
 
     byte dowPrev =  timerWeekday[it];
-    bool actPrev = timerWeekday[it] & 0x01;
+    //note: act is currently only 0 or 1.
+    //the reason we are not using bool is that the on-disk type in 0.11.0 was already int
+    int actPrev = timerWeekday[it] & 0x01;
     CJSON(timerWeekday[it], timer[F("dow")]);
     if (timerWeekday[it] != dowPrev) { //present in JSON
       timerWeekday[it] <<= 1; //add active bit
-      bool act = timer[F("en")] | actPrev;
+      int act = timer[F("en")] | actPrev;
       if (act) timerWeekday[it]++;
     }
 
@@ -382,6 +385,7 @@ void serializeConfig() {
   hw_led[F("maxpwr")] = strip.ablMilliampsMax;
   hw_led[F("ledma")] = strip.milliampsPerLed;
   hw_led[F("rev")] = strip.reverseMode;
+  hw_led[F("rgbwm")] = strip.rgbwMode;
 
   JsonArray hw_led_ins = hw_led.createNestedArray("ins");
 
