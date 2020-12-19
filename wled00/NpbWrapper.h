@@ -24,8 +24,25 @@
   #define LEDPIN 1  // Legacy pin def required by some other portions of code. This pin is not used do drive LEDs.
 #endif
 
-#ifndef IRPIN
-  #define IRPIN -1  //infrared pin (-1 to disable)  MagicHome: 4, H801 Wifi: 0
+//enable color order override for a specific range of the strip
+//This can be useful if you want to chain multiple strings with incompatible color order
+//#define COLOR_ORDER_OVERRIDE
+#define COO_MIN    0
+#define COO_MAX   35 //not inclusive, this would set the override for LEDs 0-26
+#define COO_ORDER COL_ORDER_GRB
+
+//END CONFIGURATION
+
+#if defined(USE_APA102) || defined(USE_WS2801) || defined(USE_LPD8806) || defined(USE_P9813)
+ #ifndef CLKPIN
+  #define CLKPIN 0
+ #endif
+ #ifndef DATAPIN
+  #define DATAPIN 2
+ #endif
+ #if BTNPIN == CLKPIN || BTNPIN == DATAPIN
+  #undef BTNPIN   // Deactivate button pin if it conflicts with one of the APA102 pins.
+ #endif
 #endif
 
 #ifndef RLYPIN
@@ -206,8 +223,10 @@ public:
         break;
       }
     }
-    // subtract strip start index so we're addressing just this strip instead of all pixels on all strips
-    indexPixel -= pixelStripStartIdx[stripIdx];
+#endif
+
+  void Show()
+  {
     switch (_type)
     {
       case NeoPixelType_Grb:
@@ -241,6 +260,22 @@ public:
         }
         break;
       }
+    }
+  }
+
+  /** 
+   * This will return true if enough time has passed since the last time Show() was called. 
+   * This also means that calling Show() will not cause any undue waiting. If the method for 
+   * the defined bus is hardware that sends asynchronously, then call CanShow() will let 
+   * you know if it has finished sending the data from the last Show().
+   */
+  bool CanShow()
+  {
+    switch (_type)
+    {
+      case NeoPixelType_Grb:  return _pGrb->CanShow();
+      case NeoPixelType_Grbw: return _pGrbw->CanShow();
+      default: return true;
     }
   }
 

@@ -14,3 +14,4 @@
 node_modules
 my_config.h
 *.bak
+wled00/NpbWrapper.h.bak
