@@ -235,7 +235,7 @@ public:
         switch (stripIdx)
         {
           case 0: pGrb0->SetPixelColor(indexPixel, rgb); break;
-          case 1: pGrb1->SetPixelColor(indexPixel, rgb); break;
+          case 1: pGrb1->SetPixelColor(indexPixel, brg); break;
           case 2: pGrb2->SetPixelColor(indexPixel, rgb); break;
           case 3: pGrb3->SetPixelColor(indexPixel, rgb); break;
           case 4: pGrb4->SetPixelColor(indexPixel, rgb); break;
