@@ -18,7 +18,7 @@ void shortPressAction()
 bool isButtonPressed()
 {
   #if defined(BTNPIN) && BTNPIN > -1
-    if (digitalRead(BTNPIN) == LOW) return true;
+    if (digitalRead(BTNPIN) == HIGH) return true;
   #endif
   #ifdef TOUCHPIN
     if (touchRead(TOUCHPIN) <= TOUCH_THRESHOLD) return true;
