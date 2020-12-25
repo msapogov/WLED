@@ -4,11 +4,9 @@
 
 #include <DallasTemperature.h> //DS18B20
 
-//Pin defaults for QuinLed Dig-Uno
-#ifdef ARDUINO_ARCH_ESP32
-#define TEMPERATURE_PIN 18
-#else //ESP8266 boards
-#define TEMPERATURE_PIN 14
+//Pin for Dallas sensor
+#ifndef TEMPERATURE_PIN
+#define TEMPERATURE_PIN 23
 #endif
 
 // the frequency to check temperature, 1 minute
