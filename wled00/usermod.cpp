@@ -46,7 +46,10 @@ uint8_t DALLAS_PIN =13;
 // Dallas sensor reading timer
 long temptimer = millis();
 long lastMeasure = 0;
+#ifdef MEASURE_CELCIUS
 #define Celsius // Show temperature mesaurement in Celcius otherwise is in Fahrenheit 
+#endif
+
 
 // If display does not work or looks corrupted check the
 // constructor reference:
