@@ -12,3 +12,6 @@
 node_modules
 .cproject
 .project
+*.bin
+*.gz
+wled00/my_config.h
