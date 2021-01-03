@@ -43,6 +43,6 @@ void registerUsermods()
   usermods.add(new UserMod_SensorsToMQTT());
 #endif
 #ifdef USERMOD_SHIELD_DISPLAY
-  usermods.add(new UserMod_ShieldDisplaymod());
+  usermods.add(new ShieldDisplayUsermod());
 #endif
 }
