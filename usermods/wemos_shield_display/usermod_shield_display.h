@@ -1,3 +1,4 @@
+// Credits to @mrVanboy, @gwaland and my dearest friend @westward
 #pragma once
 
 #include "wled.h"
@@ -63,7 +64,6 @@ class ShieldDisplayUsermod : public Usermod {
       u8x8.drawString(0, 0, "Loading...");
       //Serial.println("Hello from my usermod!");
     }
-
 
     /*
      * connected() is called every time the WiFi is (re)connected
