@@ -7,7 +7,7 @@
 #define USERMOD_ID_SHIELD_DISPLAY 99
 
 #ifdef ARDUINO_ARCH_ESP32
-  uint8_t SCL_PIN = 22; 
+  uint8_t SCL_PIN = 22;
   uint8_t SDA_PIN = 21;
 #else
   uint8_t SCL_PIN = 5;
@@ -16,6 +16,8 @@
 
 #define U8X8_PIN_SCL SCL_PIN
 #define U8X8_PIN_SDA SDA_PIN
+// How often we are redrawing screen
+#define USER_LOOP_REFRESH_RATE_MS 5000
 
 // If display does not work or looks corrupted check the
 // constructor reference:
@@ -32,7 +34,19 @@ class ShieldDisplayUsermod : public Usermod {
   private:
     //Private class members. You can declare variables and functions only accessible to your usermod here
     unsigned long lastTime = 0;
-    
+
+    bool displayTurnedOff = false;
+    long lastRedraw = 0;
+    // needRedraw marks if redraw is required to prevent often redrawing.
+    bool needRedraw = true;
+    // Next variables hold the previous known values to determine if redraw is required.
+    String knownSsid = "";
+    IPAddress knownIp;
+    uint8_t knownBrightness = 0;
+    uint8_t knownMode = 0;
+    uint8_t knownPalette = 0;
+    long lastUpdate = 0;
+
   public:
     //Functions called by WLED
 
@@ -56,30 +70,16 @@ class ShieldDisplayUsermod : public Usermod {
      * Use it to initialize network interfaces
      */
     void connected() {
-      // needRedraw marks if redraw is required to prevent often redrawing.
-      bool needRedraw = true;
-
-      // Next variables hold the previous known values to determine if redraw is required.
-      String knownSsid = "";
-      IPAddress knownIp;
-      uint8_t knownBrightness = 0;
-      uint8_t knownMode = 0;
-      uint8_t knownPalette = 0;
-
-      long lastUpdate = 0;
-      long lastRedraw = 0;
-      bool displayTurnedOff = false;
-      // How often we are redrawing screen
-      #define USER_LOOP_REFRESH_RATE_MS 5000
       //Serial.println("Connected to WiFi!");
     }
+
     /*
      * loop() is called continuously. Here you can check for events, read sensors, etc.
-     * 
+     *
      * Tips:
      * 1. You can use "if (WLED_CONNECTED)" to check for a successful network connection.
      *    Additionally, "if (WLED_MQTT_CONNECTED)" is available to check for a connection to an MQTT broker.
-     * 
+     *
      * 2. Try to avoid using the delay() function. NEVER use delays longer than 10 milliseconds.
      *    Instead, use a timer check as shown here.
      */
@@ -109,7 +109,7 @@ class ShieldDisplayUsermod : public Usermod {
           return;
         }
         needRedraw = false;
-  
+
         if (displayTurnedOff) {
           u8x8.setPowerSave(0);
           displayTurnedOff = false;
@@ -254,14 +254,14 @@ class ShieldDisplayUsermod : public Usermod {
      * addToConfig() can be used to add custom persistent settings to the cfg.json file in the "um" (usermod) object.
      * It will be called by WLED when settings are actually saved (for example, LED settings are saved)
      * If you want to force saving the current state, use serializeConfig() in your loop().
-     * 
+     *
      * CAUTION: serializeConfig() will initiate a filesystem write operation.
      * It might cause the LEDs to stutter and will cause flash wear if called too often.
      * Use it sparingly and always in the loop, never in network callbacks!
-     * 
+     *
      * addToConfig() will also not yet add your setting to one of the settings pages automatically.
      * To make that work you still have to add the setting to the HTML, xml.cpp and set.cpp manually.
-     * 
+     *
      * I highly recommend checking out the basics of ArduinoJson serialization and deserialization in order to use custom settings!
      */
     void addToConfig(JsonObject& root)
@@ -274,7 +274,7 @@ class ShieldDisplayUsermod : public Usermod {
     /*
      * readFromConfig() can be used to read back the custom settings you added with addToConfig().
      * This is called by WLED when settings are loaded (currently this only happens once immediately after boot)
-     * 
+     *
      * readFromConfig() is called BEFORE setup(). This means you can use your persistent values in setup() (e.g. pin assignments, buffer sizes),
      * but also that if you want to write persistent values to a dynamic buffer, you'd need to allocate it here instead of in setup.
      * If you don't know what that is, don't fret. It most likely doesn't affect your use case :)
@@ -285,7 +285,7 @@ class ShieldDisplayUsermod : public Usermod {
       userVar0 = top["great"] | 42; //The value right of the pipe "|" is the default value in case your setting was not present in cfg.json (e.g. first boot)
     }
 
-   
+
     /*
      * getId() allows you to optionally give your V2 usermod an unique ID (please define it in const.h!).
      * This could be used in the future for the system to determine whether your usermod is installed.
