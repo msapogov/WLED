@@ -3,7 +3,6 @@
 #include "wled.h"
 #include <Arduino.h>
 #include <U8x8lib.h> // from https://github.com/olikraus/u8g2/
-#include <OneWire.h>
 
 #define USERMOD_ID_SHIELD_DISPLAY 99
 
