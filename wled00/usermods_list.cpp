@@ -23,7 +23,9 @@
 #ifdef USERMOD_SHIELD_DISPLAY
 #include "../usermods/wemos_shield_display/usermod_shield_display.h"
 #endif
-
+#ifdef USERMOD_SHIELD_DISP_TEMP
+#include "../usermods/wemos_shield_display/usermod_shield_disp_temp.h"
+#endif
 void registerUsermods()
 {
 /*
@@ -44,5 +46,8 @@ void registerUsermods()
 #endif
 #ifdef USERMOD_SHIELD_DISPLAY
   usermods.add(new ShieldDisplayUsermod());
+#endif
+#ifdef USERMOD_SHIELD_DISP_TEMP
+  usermods.add(new ShieldDispTempUsermod());
 #endif
 }

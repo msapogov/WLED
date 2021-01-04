@@ -4,21 +4,54 @@
 #include "wled.h"
 #include <Arduino.h>
 #include <U8x8lib.h> // from https://github.com/olikraus/u8g2/
+#include <OneWire.h> // Dallas temperature sensor
 
-#define USERMOD_ID_SHIELD_DISPLAY 99
+//Dallas sensor quick reading. Credit to - Author: Peter Scargill, August 17th, 2013
+int16_t Dallas(int x, byte start)
+{
+    OneWire DallasSensor(x);
+    byte i;
+    byte data[2];
+    int16_t result;
+    do
+    {
+      DallasSensor.reset();
+      DallasSensor.write(0xCC);
+      DallasSensor.write(0xBE);
+      for ( i = 0; i < 2; i++) data[i] = DallasSensor.read();
+      result=(data[1]<<8)|data[0];
+      result>>=4; if (data[1]&128) result|=61440;
+      if (data[0]&8) ++result;
+      DallasSensor.reset();
+      DallasSensor.write(0xCC);
+      DallasSensor.write(0x44,1);
+      if (start) delay(1000);
+    } while (start--);
+      return result;
+}
+
+#define USERMOD_ID_SHIELD_DISP_TEMP 98
 
 #ifdef ARDUINO_ARCH_ESP32
-  uint8_t SCL_PIN = 22;
-  uint8_t SDA_PIN = 21;
+    uint8_t SCL_PIN = 22;
+    uint8_t SDA_PIN = 21;
+    #ifdef USERMOD_TEMPERATURE
+    uint8_t DALLAS_PIN =23;
+    #endif
 #else
   uint8_t SCL_PIN = 5;
   uint8_t SDA_PIN = 4;
+    #ifdef USERMOD_TEMPERATURE
+    uint8_t DALLAS_PIN =13;
+    #endif
 #endif
 
 #define U8X8_PIN_SCL SCL_PIN
 #define U8X8_PIN_SDA SDA_PIN
 // How often we are redrawing screen
 #define USER_LOOP_REFRESH_RATE_MS 5000
+long lastMeasure = 0;
+#define Celsius // Show temperature mesaurement in Celcius otherwise is in Fahrenheit 
 
 // If display does not work or looks corrupted check the
 // constructor reference:
@@ -31,7 +64,7 @@ U8X8_SSD1306_128X32_UNIVISION_HW_I2C u8x8(U8X8_PIN_NONE, U8X8_PIN_SCL, U8X8_PIN_
 //U8X8_SSD1306_128X64_NONAME_HW_I2C u8x8(U8X8_PIN_NONE, U8X8_PIN_SCL, U8X8_PIN_SDA); // Pins are Reset, SCL, SDA
 
 //class name. Use something descriptive and leave the ": public Usermod" part :)
-class ShieldDisplayUsermod : public Usermod {
+class ShieldDispTempUsermod : public Usermod {
   private:
     //Private class members. You can declare variables and functions only accessible to your usermod here
     unsigned long lastTime = 0;
@@ -56,6 +89,7 @@ class ShieldDisplayUsermod : public Usermod {
      * You can use it to initialize variables, sensors or similar.
      */
     void setup() {
+      Dallas (DALLAS_PIN,1);
       u8x8.begin();
       u8x8.setPowerSave(0);
       u8x8.setFlipMode(1);
@@ -292,7 +326,7 @@ class ShieldDisplayUsermod : public Usermod {
      */
     uint16_t getId()
     {
-      return USERMOD_ID_SHIELD_DISPLAY;
+      return USERMOD_ID_SHIELD_DISP_TEMP;
     }
 
    //More methods can be added in the future, this example will then be extended.

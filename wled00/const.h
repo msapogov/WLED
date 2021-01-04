@@ -21,6 +21,7 @@
 #define USERMOD_ID_FIXNETSERVICES 4            //Usermod "usermod_Fix_unreachable_netservices.h"
 #define USERMOD_ID_PIRSWITCH      5            //Usermod "usermod_PIR_sensor_switch.h"
 #define USERMOD_ID_IMU            6            //Usermod "usermod_mpu6050_imu.h"
+#define USERMOD_ID_SHIELD_DISP_TEMP 98         //Usermod "usermod_shield_disp_temp.h"
 #define USERMOD_ID_SHIELD_DISPLAY 99           //Usermod "usermod_shield_display.h"
 
 //Access point behavior
