@@ -58,7 +58,7 @@ class ShieldDisplayUsermod : public Usermod {
     void setup() {
       u8x8.begin();
       u8x8.setPowerSave(0);
-      u8x8.setFlipMode(0);
+      u8x8.setFlipMode(1);
       u8x8.setContrast(10); //Contrast setup will help to preserve OLED lifetime. In case OLED need to be brighter increase number up to 255
       u8x8.setFont(u8x8_font_chroma48medium8_r);
       u8x8.drawString(0, 0, "Loading...");
