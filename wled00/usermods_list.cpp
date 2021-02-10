@@ -26,6 +26,17 @@
 #ifdef USERMOD_SHIELD_DISP_TEMP
 #include "../usermods/wemos_shield_display/usermod_shield_disp_temp.h"
 #endif
+
+#ifdef USERMOD_FOUR_LINE_DISLAY
+#include "../usermods/usermod_v2_four_line_display/usermod_v2_four_line_display.h"
+#endif
+#ifdef USERMOD_ROTARY_ENCODER_UI
+#include "../usermods/usermod_v2_rotary_encoder_ui/usermod_v2_rotary_encoder_ui.h"
+#endif
+#ifdef USERMOD_AUTO_SAVE
+#include "../usermods/usermod_v2_auto_save/usermod_v2_auto_save.h"
+#endif
+
 void registerUsermods()
 {
 /*
@@ -49,5 +60,14 @@ void registerUsermods()
 #endif
 #ifdef USERMOD_SHIELD_DISP_TEMP
   usermods.add(new ShieldDispTempUsermod());
+
+#ifdef USERMOD_FOUR_LINE_DISLAY
+  usermods.add(new FourLineDisplayUsermod());
+#endif
+#ifdef USERMOD_ROTARY_ENCODER_UI
+  usermods.add(new RotaryEncoderUIUsermod());
+#endif
+#ifdef USERMOD_AUTO_SAVE
+  usermods.add(new AutoSaveUsermod());
 #endif
 }
