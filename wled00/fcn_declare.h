@@ -110,7 +110,7 @@ void setValuesFromMainSeg();
 void resetTimebase();
 void toggleOnOff();
 void setAllLeds();
-void setLedsStandard(bool justColors = false);
+void setLedsStandard();
 bool colorChanged();
 void colorUpdated(int callMode);
 void updateInterfaces(uint8_t callMode);
@@ -221,6 +221,7 @@ class UsermodManager {
     void readFromConfig(JsonObject& obj);
 
     bool add(Usermod* um);
+    Usermod* lookup(uint16_t mod_id);
     byte getModCount();
 };
 
