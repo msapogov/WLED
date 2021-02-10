@@ -60,7 +60,7 @@ void registerUsermods()
 #endif
 #ifdef USERMOD_SHIELD_DISP_TEMP
   usermods.add(new ShieldDispTempUsermod());
-
+#endif
 #ifdef USERMOD_FOUR_LINE_DISLAY
   usermods.add(new FourLineDisplayUsermod());
 #endif
